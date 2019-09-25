@@ -13,6 +13,7 @@ from sklearn.datasets import load_svmlight_file
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn import preprocessing
 import pylab as pl
+from matplotlib import ticker
 import time
 
 
@@ -35,103 +36,115 @@ def loadDatasets(trainFile, testFile):
     return trainingSet_X, trainingSet_Y, testSet_X, testSet_Y
 
 
+def runTest(method, base, sets):
+    trainingSet_X, trainingSet_Y, testSet_X, testSet_Y = sets
+    X_cord = []
+    Y_cord = []
+    Y_time = []
+    last_cm = None
+    for i in range(1000, len(trainingSet_X) + 1, 1000):
+        start_time = time.time()
+        print('%s[FIT](%d)' % (method, i))
+        base.fit(trainingSet_X[:i], trainingSet_Y[:][:i])
+
+        # predicao do classificador
+        print('Predicting...')
+        pred_Y = base.predict(testSet_X)
+        time_pred = time.time() - start_time
+
+        # mostra o resultado do classificador na base de teste
+        score = base.score(testSet_X, testSet_Y)
+        print("%s[SCORE](%d): %s" % (method, i, score))
+        X_cord.append(i)
+        Y_cord.append(score * 100)
+
+        # cria a matriz de confusao
+        last_cm = confusion_matrix(testSet_Y, pred_Y)
+        print(last_cm)
+
+        # mostra tempo
+        print("%s[TIME](%d): %s seconds" % (method, i, time_pred))
+        Y_time.append(time_pred)
+    return X_cord, Y_cord, Y_time, last_cm
+
+
+def confusionMatrix(method, cm):
+    fig = pl.figure()
+    ax = fig.add_subplot(111)
+    cax = ax.matshow(cm)
+    pl.title("Matriz de Confusao - " + method)
+    fig.colorbar(cax)
+    ax.set_xticklabels(['', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])
+    ax.set_yticklabels(['', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])
+
+    ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+    ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
+
+    pl.xlabel('Predito')
+    pl.ylabel('Valor Real')
+    pl.savefig(method + '_cm.png', bbox_inches='tight')
+
+
 def main(trainfile, testfile):
 
     # loads data
     print("Loading data...")
     start_time = time.time()
-    trainingSet_X, trainingSet_Y, testSet_X, testSet_Y = loadDatasets(
+    sets = loadDatasets(
         trainfile, testfile)
     print("Load data time: %s seconds" % (time.time() - start_time))
 
-    # # cria um kNN
-    # neigh = KNeighborsClassifier(n_neighbors=3, metric='euclidean')
-    # for i in range(1000, len(trainingSet_X) + 1, 1000):
-    #     start_time = time.time()
-    #     print('KNN[FIT](' + str(i) + ')')
-    #     neigh.fit(trainingSet_X[:i], trainingSet_Y[:][:i])
+    # kNN
+    KNN_X_cord, KNN_Y_cord, KNN_Y_time, KNN_last_cm = runTest(
+        'KNN', KNeighborsClassifier(n_neighbors=3, metric='euclidean'), sets)
 
-    #     # predicao do classificador
-    #     print('Predicting...')
-    #     pred_Y = neigh.predict(testSet_X)
+    # Naive Bayes
+    NB_X_cord, NB_Y_cord, NB_Y_time, NB_last_cm = runTest('NAIVEBAYES', GaussianNB(), sets)
 
-    #     # mostra o resultado do classificador na base de teste
-    #     print("KNN[SCORE](%d): %s" % (i, neigh.score(testSet_X, testSet_Y)))
+    # LDA
+    LDA_X_cord, LDA_Y_cord, LDA_Y_time, LDA_last_cm = runTest(
+        'LDA', LinearDiscriminantAnalysis(solver='lsqr'), sets)
 
-    #     # cria a matriz de confusao
-    #     cm = confusion_matrix(testSet_Y, pred_Y)
-    #     print(cm)
-    #     print("KNN[TIME](%d): %s seconds" % (i, (time.time() - start_time)))
+    # LR
+    LR_X_cord, LR_Y_cord, LR_Y_time, LR_last_cm = runTest('LR', LogisticRegression(
+        random_state=0, solver='lbfgs', multi_class='multinomial', max_iter=1000), sets)
 
-    # cria um Naive Bayes
-    gnb = GaussianNB()
-    X_cord = []
-    Y_cord = []
-    for i in range(1000, len(trainingSet_X) + 1, 1000):
-        start_time = time.time()
-        print('NAIVEBAYES[FIT](' + str(i) + ')')
-        gnb.fit(trainingSet_X[:i], trainingSet_Y[:][:i])
+    pl.figure(1)
+    pl.title("Treino x Desempenho")
+    pl.xlabel("Tamanho da base de treino")
+    pl.ylabel("Taxa de acerto (%)")
+    pl.plot(KNN_X_cord, KNN_Y_cord)
+    pl.plot(NB_X_cord, NB_Y_cord)
+    pl.plot(LDA_X_cord, LDA_Y_cord)
+    pl.plot(LR_X_cord, LR_Y_cord)
+    pl.legend(['KNN', 'Naive Bayes', 'LDA', 'LR'], loc='best')
+    pl.savefig('treino_desempenho.png', bbox_inches='tight')
 
-        # predicao do classificador
-        print('Predicting...')
-        pred_Y = gnb.predict(testSet_X)
+    pl.figure(2)
+    pl.title("Treino x Tempo")
+    pl.xlabel("Tamanho da base de treino")
+    pl.ylabel("Tempo (segundos)")
+    pl.plot(KNN_X_cord, KNN_Y_time)
+    pl.plot(NB_X_cord, NB_Y_time)
+    pl.plot(LDA_X_cord, LDA_Y_time)
+    pl.plot(LR_X_cord, LR_Y_time)
+    pl.legend(['KNN', 'Naive Bayes', 'LDA', 'LR'], loc='best')
+    pl.savefig('treino_tempo.png', bbox_inches='tight')
 
-        # mostra o resultado do classificador na base de teste
-        score = gnb.score(testSet_X, testSet_Y)
-        print("NAIVEBAYES[SCORE](%d): %s" % (i, score))
-        X_cord.append(i)
-        Y_cord.append(score)
+    pl.figure(3)
+    pl.title("Treino x Tempo")
+    pl.xlabel("Tamanho da base de treino")
+    pl.ylabel("Tempo (segundos)")
+    pl.plot(NB_X_cord, NB_Y_time)
+    pl.plot(LDA_X_cord, LDA_Y_time)
+    pl.plot(LR_X_cord, LR_Y_time)
+    pl.legend(['Naive Bayes', 'LDA', 'LR'], loc='best')
+    pl.savefig('treino_tempo_semknn.png', bbox_inches='tight')
 
-        # cria a matriz de confusao
-        cm = confusion_matrix(testSet_Y, pred_Y)
-        print(cm)
-        print("NAIVEBAYES[TIME](%d): %s seconds" %
-              (i, (time.time() - start_time)))
-    pl.plot(X_cord, Y_cord)
-    pl.show()
-
-    # # cria um LDA
-    # clf = LinearDiscriminantAnalysis(solver='lsqr')
-    # for i in range(1000, len(trainingSet_X) + 1, 1000):
-    #     start_time = time.time()
-    #     print('LDA[FIT](' + str(i) + ')')
-    #     clf.fit(trainingSet_X[:i], trainingSet_Y[:][:i])
-
-    #     # predicao do classificador
-    #     print('Predicting...')
-    #     pred_Y = clf.predict(testSet_X)
-
-    #     # mostra o resultado do classificador na base de teste
-    #     print("LDA[SCORE](%d): %s" % (i, clf.score(testSet_X, testSet_Y)))
-
-    #     # cria a matriz de confusao
-    #     cm = confusion_matrix(testSet_Y, pred_Y)
-    #     print(cm)
-    #     print("LDA[TIME](%d): %s seconds" % (i, (time.time() - start_time)))
-
-    # # cria um LR
-    # lrg = LogisticRegression(random_state=0, solver='lbfgs',
-    #                          multi_class='multinomial', max_iter=1000)
-    # for i in range(1000, len(trainingSet_X) + 1, 1000):
-    #     start_time = time.time()
-    #     print('LR[FIT](' + str(i) + ')')
-    #     lrg.fit(trainingSet_X[:i], trainingSet_Y[:][:i])
-
-    #     # predicao do classificador
-    #     print('Predicting...')
-    #     pred_Y = lrg.predict(testSet_X)
-
-    #     # mostra o resultado do classificador na base de teste
-    #     print("LR[SCORE](%d): %s" % (i, lrg.score(testSet_X, testSet_Y)))
-
-    #     # cria a matriz de confusao
-    #     cm = confusion_matrix(testSet_Y, pred_Y)
-    #     print(cm)
-    #     print("LR[TIME](%d): %s seconds" % (i, (time.time() - start_time)))
-
-    # pl.matshow(cm)
-    # pl.colorbar()
-    # pl.show()
+    confusionMatrix('KNN', KNN_last_cm)
+    confusionMatrix('NB', NB_last_cm)
+    confusionMatrix('LDA', LDA_last_cm)
+    confusionMatrix('LR', LR_last_cm)
 
 
 if __name__ == "__main__":
